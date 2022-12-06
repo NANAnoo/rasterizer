@@ -51,8 +51,8 @@ void LeedsGLRenderWidget::initializeGL()
 void LeedsGLRenderWidget::resizeGL(int w, int h)
 {
 
-    w = std::max(w,0);
-    h = std::max(h,0);
+    w = 2 * std::max(w,0);
+    h = 2 * std::max(h,0);
 
     // resize the render images
     leedsGL.resizeBuffers(static_cast<unsigned int>(w), static_cast<unsigned int>(h));

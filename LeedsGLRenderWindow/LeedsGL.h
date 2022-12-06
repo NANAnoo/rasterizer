@@ -10,6 +10,8 @@
 #include "RGBAValue.h"
 #include "RGBAValueF.h"
 #include "RGBAImage.h"
+#include "Vec.h"
+#include "ThreadPool.h"
 
 namespace LeedsGLUtils
 {
@@ -23,14 +25,21 @@ namespace LeedsGLUtils
 struct InputVertex
 {
     //TODO: Complete with what information needs to be passed forward.
+    // Sorry. I prefer my vector :)
+    // position
+    vec4 position;
+    // normal
+    vec3 normal;
+    // color
+    vec4 color;
+    // texture coords
+    vec2 tex_coord;
 };
 
 struct TransformedVertex
 {
      Cartesian3 position;
     //TODO: Complete with what information needs to be passed forward.
-
-
 };
 
 struct Primitive
@@ -112,8 +121,10 @@ public:
                                  float shin);
     //BUFFERS
     RGBAImage frameBuffer;
+    RGBAImage swapBuffer;
 
     //Masks
+    static const std::byte UNKNOWN_MASK{0};
     static const std::byte COLORMASK{1};
     static const std::byte DEPTHMASK{2};
     //Function constants
@@ -162,6 +173,8 @@ private:
     std::vector<Primitive> clippedPrimitivesQueue;
     std::vector<Fragment> fragmentQueue;
 
+    // multiple threads
+    TP::ThreadPool *pool;
 };
 
 #endif // LEEDSGL_H
