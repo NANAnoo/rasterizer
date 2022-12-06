@@ -40,26 +40,68 @@ void LeedsGL::clear(byte mask) {
 void LeedsGL::setUniform(const string &name, const bool value) {
     //TODO: set an uniform bool with given name value.
     //uniform variables should decide how your shading happens
+    if (name == "lightingEnabled")
+    {
+        this->lightingEnabled = value;
+    }
+    else if (name == "texturingEnabled")
+    {
+        this->texturingEnabled = value;
+    }
+    else if (name == "textureModulationEnabled")
+    {
+        this->textureModulationEnabled = value;
+    }
+    else if (name == "UVColourDebug")
+    {
+        this->UVColourDebug = value;
+    }
 }
 
 void LeedsGL::setUniform(const string &name, const Matrix4 &mat) {
     //TODO: set an uniform matrix with given name.
     //uniform variables should decide how your shading happens
+    if (name == "viewPortMatrix") {
+        this->viewPortMatrix = mat;
+    } else if (name == "projectionMatrix") {
+        this->projectionMatrix = mat;
+    } else if (name == "modelviewMatrix") {
+        this->modelviewMatrix = mat;
+    } else if (name == "lightMatrix") {
+        this->lightMatrix = mat;
+    }
 }
 
 void LeedsGL::setUniform(const string &name, const RGBAValueF &col) {
     //TODO: set an uniform colour with given name.
     //uniform variables should decide how your shading happens
+    if (name == "lightColour") {
+        this->lightColour = col;
+    } else if (name == "emissiveMaterial") {
+        this->emissiveMaterial = col;
+    } else if (name == "ambientMaterial") {
+        this->ambientMaterial = col;
+    } else if (name == "diffuseMaterial") {
+        this->ambientMaterial = col;
+    } else if (name == "specularMaterial") {
+        this->specularMaterial = col;
+    }
 }
 
 void LeedsGL::setUniform(const std::string &name, const float val) {
     //TODO: set an uniform float with given name.
     //uniform variables should decide how your shading happens
+    if (name == "shininessMaterial") {
+        this->shininessMaterial = val;
+    }
 }
 
 void LeedsGL::setUniform(const std::string &name, const Homogeneous4 &pos) {
     //TODO: set an uniform position with given name.
     //uniform variables should decide how your shading happens
+    if (name == "lightPosition") {
+        this->lightPosition = pos;
+    }
 }
 
 void LeedsGL::clearColor(const RGBAValueF &col) {
