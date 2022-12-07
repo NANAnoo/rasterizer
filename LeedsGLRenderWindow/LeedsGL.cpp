@@ -121,49 +121,76 @@ void LeedsGL::resizeBuffers(unsigned const int width, unsigned const int height)
 }
 
 Matrix4 LeedsGLUtils::calculateViewportMatrix(float cx, float cy, float width, float height) {
-    //TODO: return a matrix that given parameters cx,cy (center of your viewport) width height
     //performs the viewport transformation. NDCS -> DCS.
-    return Matrix4();
+#ifdef __APPLE__
+    width = width / 2;
+    height = height / 2;
+#endif
+    Matrix4 vp;
+    vp[0][0] = width / 2, vp[0][1] = 0, vp[0][2] = 0, vp[0][3] = (cx + 1) * width / 2;
+    vp[1][0] = 0, vp[1][1] = height / 2, vp[1][2] = 0, vp[1][3] = (cy + 1) * height / 2;
+    vp[2][0] = 0, vp[2][1] = 0, vp[2][2] = 1, vp[2][3] = 0;
+    vp[3][0] = 0, vp[3][1] = 0, vp[3][2] = 0, vp[3][3] = 1;
+    return vp;
 }
 
 Matrix4
 LeedsGLUtils::calculateProjectionOrtho(float left, float right, float bottom, float top, float near, float far) {
-    //TODO: return a Ortographic projection matrix, with the parameters above.
-    //right or left handedness may have effects on other parts of your code,
+    //right or left-handedness may have effects on other parts of your code,
     //such as shading, clipping, culling, etc.
-    return Matrix4();
+    Matrix4 po;
+    po[0][0] = 2 / (right - left), po[0][1] = 0, po[0][2] = 0, po[0][3] = - (right + left) / (right - left);
+    po[1][0] = 0, po[1][1] = 2 / (top - bottom), po[1][2] = 0, po[1][3] = - (top + bottom) / (top - bottom);
+    po[2][0] = 0, po[2][1] = 0, po[2][2] = 1 / (far - near), po[2][3] = - near / (far - near);
+    po[3][0] = 0, po[3][1] = 0, po[3][2] = 0, po[3][3] = 1;
+    return po;
 }
 
 Matrix4
 LeedsGLUtils::calculateProjectionFrustum(float left, float right, float bottom, float top, float near, float far) {
-    //TODO: return a Perspective projection matrix, with the parameters above.
-    //right or left handedness may have effects on other parts of your code,
+    //right or left-handedness may have effects on other parts of your code,
     //such as shading, clipping, culling, etc.
-    return Matrix4();
+    Matrix4 fr;
+    fr[0][0] = 2 * near / (right - left), fr[0][1] = 0, fr[0][2] = - (right + left) / (right - left), fr[0][3] = 0;
+    fr[1][0] = 0, fr[1][1] = 2 * near / (top - bottom), fr[1][2] = - (top + bottom) / (top - bottom), fr[1][3] = 0;
+    fr[2][0] = 0, fr[2][1] = 0, fr[2][2] = far / (far - near), fr[2][3] = - far * near / (far - near);
+    fr[3][0] = 0, fr[3][1] = 0, fr[3][2] = 1, fr[3][3] = 0;
+    return fr;
 }
 
 
 void LeedsGL::texImage2D(RGBAImage const *textureImage) {
     //TODO: set in your pipeline which texture should be used to render.
     //Parameter is a pointer to the texture, be aware of how it is stored, and ownership of the resources.
+
 }
 
 void LeedsGL::enable(const std::byte function) {
     //TODO: enables a pipeline function described by the byte parameter.
-
+    if ((function & PERSPECTIVE) != UNKNOWN_MASK) {
+        perspective = true;
+    } else if ((function & DEPTHTEST) != UNKNOWN_MASK) {
+        depthTestEnabled = true;
+    }
 }
 
 void LeedsGL::disable(const std::byte function) {
     //TODO: disables a pipeline function described by the byte parameter.
-
+    if ((function & PERSPECTIVE) != UNKNOWN_MASK) {
+        perspective = false;
+    } else if ((function & DEPTHTEST) != UNKNOWN_MASK) {
+        depthTestEnabled = false;
+    }
 }
 
 void LeedsGL::lineWidth(const float width) {
     //TODO: Set a variable that describes what is the width in pixels of the line to be rasterized.
+    rasterizedLineWidth = width;
 }
 
 void LeedsGL::pointSize(const float size) {
     //TODO: Set a variable that describes what is the size in pixels of the point to be rasterized.
+    rasterizedPointSize = size;
 }
 
 void LeedsGL::drawArrays(const std::vector<Homogeneous4> &vertices, const std::vector<Homogeneous4> &normals,
