@@ -50,9 +50,10 @@ void LeedsGLRenderWidget::initializeGL()
 // called every time the widget is resized
 void LeedsGLRenderWidget::resizeGL(int w, int h)
 {
-
+#ifdef __APPLE__
     w = 2 * std::max(w,0);
     h = 2 * std::max(h,0);
+#endif
 
     // resize the render images
     leedsGL.resizeBuffers(static_cast<unsigned int>(w), static_cast<unsigned int>(h));
@@ -154,7 +155,7 @@ void LeedsGLRenderWidget::paintLeedsGL()
     }
     // translate by the visual translation
     Matrix4 M;
-    M.SetTranslation(Cartesian3(renderParameters->xTranslate,renderParameters->yTranslate,renderParameters->zTranslate-4.0f));
+    M.SetTranslation(Cartesian3(renderParameters->xTranslate,renderParameters->yTranslate,3 * renderParameters->zTranslate-4.0f));
     //I'm expecting a left hand coordinate system, so:
     Matrix4 R = renderParameters->rotationMatrix;
     M = M * R;

@@ -198,10 +198,23 @@ static int wid = 0;
             mux.lock();
         }
 
-        void syncGroup(TaskGroup &tasks, int batch_size = 1) {
+        void syncGroup(TaskGroup &tasks, int batch_size = -1) {
+            if (batch_size == -1) {
+                // default size, alloc tasks with avg count to every worker
+                batch_size = int(tasks.size() / workers.size());
+            }
+            batch_size = std::max(batch_size, 0);
+            if (batch_size == 0) {
+                // execute directly
+                for (auto &task : tasks) {
+                    task();
+                }
+                return;
+            }
             TaskGroup real_tasks;
-            if (batch_size > 1) {
-                int real_size = tasks.size() / batch_size + 1;
+            if (batch_size >= 1) {
+                // alloc tasks to all workers
+                int real_size = int(tasks.size()) / batch_size + 1;
                 real_tasks.resize(real_size);
                 for (unsigned int i = 0; i < real_size; i++) {
                     real_tasks[i] = [&tasks, i, batch_size]() {
@@ -213,9 +226,8 @@ static int wid = 0;
                         }
                     };
                 }
-            } else {
-                real_tasks = tasks;
             }
+            // use count to sync all tasks
             int count = real_tasks.size();
             std::mutex mx;
             for (auto task: real_tasks) {

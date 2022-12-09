@@ -3,6 +3,7 @@
 
 #include <string>
 #include <map>
+#include <unordered_map>
 #include <vector>
 #include <memory>
 #include <cstddef>
@@ -10,118 +11,161 @@
 #include "RGBAValue.h"
 #include "RGBAValueF.h"
 #include "RGBAImage.h"
-#include "Vec.h"
 #include "ThreadPool.h"
 
-namespace LeedsGLUtils
-{
+namespace LeedsGLUtils {
     Matrix4 calculateViewportMatrix(float cx, float cy, float width, float height);
-    Matrix4 calculateProjectionFrustum(float left, float right,float bottom, float top, float near, float far);
-    Matrix4 calculateProjectionOrtho(float left, float right,float bottom, float top, float near, float far);
+
+    Matrix4 calculateProjectionFrustum(float left, float right, float bottom, float top, float near, float far);
+
+    Matrix4 calculateProjectionOrtho(float left, float right, float bottom, float top, float near, float far);
+
     float distancePointLine(Cartesian3 r, Cartesian3 n, Cartesian3 p);
 }
 
 // class with vertex attributes
-struct InputVertex
-{
-    //TODO: Complete with what information needs to be passed forward.
-    // Sorry. I prefer my vector :)
+struct InputVertex {
     // position
-    vec4 position;
+    Homogeneous4 position;
     // normal
-    vec3 normal;
+    Cartesian3 normal;
     // color
-    vec4 color;
+    RGBAValueF color;
     // texture coords
-    vec2 tex_coord;
+    Cartesian3 tex_coord;
 };
 
-struct TransformedVertex
-{
-     Cartesian3 position;
-    //TODO: Complete with what information needs to be passed forward.
+struct TransformedVertex {
+    Homogeneous4 position;
+    // coords in vsc
+    Homogeneous4 v_vcs;
+    // normal
+    Cartesian3 normal;
+    // color
+    RGBAValueF color;
+    // texture coords
+    Cartesian3 tex_coord;
+    // transformed w, used for interpolation
+    float w;
+
 };
 
-struct Primitive
-{
-    //TODO: Complete with what information needs to be passed forward.
-     std::vector<TransformedVertex> transformedVertices;
+struct Primitive {
+    std::vector<TransformedVertex> transformedVertices;
 };
 
-
-struct Fragment
-{
+struct Fragment {
     int row;
     int col;
-    //TODO: Complete with what information needs to be passed forward.
+    int width;
+    int height;
+    std::vector<RGBAValueF> colors;
+    std::vector<float> depths;
 
+    void resize() {
+        int size = width * height;
+        colors.clear();
+        colors.resize(size, {0, 0, 0, 0});
+        depths.clear();
+        depths.resize(size);
+    }
 };
 
 
-class LeedsGL
-{
+class LeedsGL {
 public:
     LeedsGL();
+
     ~LeedsGL();
 
     //RENDERING PARAMETERS:
-    void setUniform(const std::string& name,const bool value);
-    void setUniform(const std::string& name, const Matrix4& mat);
-    void setUniform(const std::string& name, const RGBAValueF& col);
-    void setUniform(const std::string& name, const Homogeneous4& pos);
-    void setUniform(const std::string& name, const float val);
+    void setUniform(const std::string &name, const bool value);
+
+    void setUniform(const std::string &name, const Matrix4 &mat);
+
+    void setUniform(const std::string &name, const RGBAValueF &col);
+
+    void setUniform(const std::string &name, const Homogeneous4 &pos);
+
+    void setUniform(const std::string &name, const float val);
 
     //PIPELINE CONTROL:
     void clearColor(const RGBAValueF &col);
+
     void clear(std::byte mask);
+
     void enable(const std::byte function);
+
     void disable(const std::byte function);
+
     void texImage2D(RGBAImage const *textureImage);
-    void resizeBuffers(unsigned const int width,unsigned const int height);
+
+    void resizeBuffers(unsigned const int width, unsigned const int height);
+
     void lineWidth(const float width);
+
     void pointSize(const float size);
 
     //MAIN PIPELINE IMPLEMENTATION
-    void drawArrays(const std::vector<Homogeneous4>& vertices,
-                    const std::vector<Homogeneous4>& normals,
-                    const std::vector<Cartesian3>& textureCoordinates,
-                    const std::vector<RGBAValueF>& colors,std::byte mode);
-    void inputAssembly(const std::vector<Homogeneous4>& vertices,
-                       const std::vector<Homogeneous4>& normals,
-                       const std::vector<Cartesian3>& textureCoordinates,
-                       const std::vector<RGBAValueF>& colors,
-                       std::vector<InputVertex>& result);
-    void transformVertices(std::vector<InputVertex>& vertices,
-                           std::vector<TransformedVertex>& result);
-    void primitiveAssembly(std::vector<TransformedVertex>& vertices,
-                           std::byte mode,
-                           std::vector<Primitive>& result);
-    void clipAndCull(std::vector<Primitive>& primitives,
-                     std::byte mode,
-                     std::vector<Primitive>& result);
-    void rasterisePrimitives(std::vector<Primitive>& primitives,
-                             std::byte mode,
-                             std::vector<Fragment>& result);
+    void drawArrays(const std::vector<Homogeneous4> &vertices,
+                    const std::vector<Homogeneous4> &normals,
+                    const std::vector<Cartesian3> &textureCoordinates,
+                    const std::vector<RGBAValueF> &colors, std::byte mode);
 
-    void rasterisePoint(const Primitive& point,
-                        std::vector<Fragment>& output);
-    void rasteriseLine(const Primitive& line,
-                       std::vector<Fragment>& output);
-    void rasteriseTriangle(const Primitive& triangle,
-                           std::vector<Fragment>& output);
-    void processFragments(std::vector<Fragment>& fragments);
+    void inputAssembly(const std::vector<Homogeneous4> &vertices,
+                       const std::vector<Homogeneous4> &normals,
+                       const std::vector<Cartesian3> &textureCoordinates,
+                       const std::vector<RGBAValueF> &colors,
+                       std::vector<InputVertex> &result);
+
+    void transformVertices(std::vector<InputVertex> &vertices,
+                           std::vector<TransformedVertex> &result);
+
+    void primitiveAssembly(std::vector<TransformedVertex> &vertices,
+                           std::byte mode,
+                           std::vector<Primitive> &result);
+
+    void clipAndCull(std::vector<Primitive> &primitives,
+                     std::byte mode,
+                     std::vector<Primitive> &result);
+
+    void rasterisePrimitives(std::vector<Primitive> &primitives,
+                             std::byte mode,
+                             std::vector<Fragment> &result);
+
+    void rasterisePoint(int index, const Primitive &point,
+                        std::vector<Fragment> &output);
+
+    void rasteriseLine(int index, const Primitive &line,
+                       std::vector<Fragment> &output);
+
+    void rasteriseTriangle(int index, const Primitive &triangle,
+                           std::vector<Fragment> &output);
+
+    void processFragments(std::vector<Fragment> &fragments);
 
     //SHADING.
-    RGBAValueF CalculateLighting(const Homogeneous4& n_vcs,
-                                 const Homogeneous4& v_vcs,
-                                 const RGBAValueF& em,
-                                 const RGBAValueF& am,
-                                 const RGBAValueF& diff,
-                                 const RGBAValueF& spec,
+    RGBAValueF CalculateLighting(const Homogeneous4 &n_vcs,
+                                 const Homogeneous4 &v_vcs,
+                                 const RGBAValueF &em,
+                                 const RGBAValueF &am,
+                                 const RGBAValueF &diff,
+                                 const RGBAValueF &spec,
                                  float shin);
+
+    // texture color
+    RGBAValueF textureSampler(const Cartesian3 &uv);
+
+    // generate a color depend on the state
+    RGBAValueF calculateColor(const RGBAValueF &color,
+                              const Cartesian3 &uv,
+                              const Homogeneous4 &n_vcs,
+                              const Homogeneous4 &v_vcs);
+
     //BUFFERS
     RGBAImage frameBuffer;
     RGBAImage swapBuffer;
+    std::vector<float> depthBuffer;
 
     //Masks
     static const std::byte UNKNOWN_MASK{0};
@@ -139,7 +183,7 @@ public:
 private:
 
 //uniform variables
-    RGBAImage const* enabledTexture;
+    RGBAImage const *enabledTexture;
     bool texturingEnabled;
     bool textureModulationEnabled;
     bool UVColourDebug;
@@ -173,6 +217,8 @@ private:
     std::vector<Primitive> clippedPrimitivesQueue;
     std::vector<Fragment> fragmentQueue;
 
+    // texture
+    const RGBAImage *texture;
     // multiple threads
     TP::ThreadPool *pool;
 };
