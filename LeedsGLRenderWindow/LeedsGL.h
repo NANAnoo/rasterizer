@@ -36,6 +36,7 @@ struct InputVertex {
 };
 
 struct TransformedVertex {
+    // coords used to rasterize on screen
     Homogeneous4 position;
     // coords in vsc
     Homogeneous4 v_vcs;
@@ -59,9 +60,10 @@ struct Fragment {
     int col;
     int width;
     int height;
+    // fragment image buffer
     std::vector<RGBAValueF> colors;
+    // fragment depth buffer
     std::vector<float> depths;
-
     void resize() {
         int size = width * height;
         colors.clear();
@@ -160,7 +162,8 @@ public:
     RGBAValueF calculateColor(const RGBAValueF &color,
                               const Cartesian3 &uv,
                               const Homogeneous4 &n_vcs,
-                              const Homogeneous4 &v_vcs);
+                              const Homogeneous4 &v_vcs,
+                              const float w);
 
     //BUFFERS
     RGBAImage frameBuffer;

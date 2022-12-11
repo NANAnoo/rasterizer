@@ -60,7 +60,7 @@ void LeedsGL::setUniform(const string &name, const bool value) {
         this->texturingEnabled = value;
     } else if (name == "textureModulationEnabled") {
         this->textureModulationEnabled = value;
-    } else if (name == "UVColourDebug") {
+    } else if (name == "UVColorDebug") {
         this->UVColourDebug = value;
     }
 }
@@ -287,11 +287,12 @@ LeedsGL::primitiveAssembly(std::vector<TransformedVertex> &vertices, std::byte m
 void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, std::vector<Primitive> &result) {
     //Pay attention to what type of projection you are using, as your clipping planes will be different.
     //If you choose to skip this step as it is one of your last tasks, just return all the same primitives.
+    // six panel of visual space
     const byte INSIDE{0}, LEFT{1}, RIGHT{2}, BOTTOM{4}, TOP{8}, FRONT{16}, BACK{32};
     TicTok t("clipAndCull");
     // clip utils:
-    // F1. get intersection info
-    const auto is_in_NDCS = [](Homogeneous4 &p) {
+    // get intersection info with NDCS
+    const auto intersection_info = [](Homogeneous4 &p) {
         std::byte res = INSIDE;
         if (p.w < 0) {
             return FRONT;
@@ -302,13 +303,20 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
         if (p.y < -1) res |= BOTTOM; else if (p.y > 1) res |= TOP;
         return res;
     };
-    // convert position to DCS
+    // convert position from NDCS to DCS
     const auto transform = [this](Homogeneous4 &position) {
         position = viewPortMatrix * position;
         position = position / position.w;
     };
-    // cut a line with a given surface
+    // cut a line with a given plane
     // return an interpaloted vertex
+    // because:
+    //     alpha * P0 +（1 - alpha） * P1 = P_C
+    // then:
+    //          alpha = (P_C - P1) / (P_0 - P_1)
+    // P_C is the intersection between the boundary and this line
+    // for example, if want to calculate the intersection between the line and Plane Z = 1
+    // alpha = (P_C.z - P1.z) / (P_0.z - P_1.z), where P_C.z == 1
     const auto cutLine =
             [](const TransformedVertex &v0, const TransformedVertex &v1, byte mode) {
                 float alpha = 0;
@@ -326,6 +334,7 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                     alpha = (1 - v1.position.y) / (v0.position.y - v1.position.y);
                 }
                 float beta = 1 - alpha;
+                // get interpolated vertex
                 TransformedVertex res;
                 res.position = alpha * v0.position + beta * v1.position;
                 res.v_vcs = alpha * v0.v_vcs + beta * v1.v_vcs;
@@ -340,7 +349,7 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
     if (mode == POINTS) {
         for (auto &p: primitives) {
             // check if the point is on the back of the camera
-            if (is_in_NDCS(p.transformedVertices[0].position) == INSIDE) {
+            if (intersection_info(p.transformedVertices[0].position) == INSIDE) {
                 // transform to DCS
                 transform(p.transformedVertices[0].position);
                 result.push_back(p);
@@ -350,8 +359,8 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
         for (auto &line: primitives) {
             Homogeneous4 &p1 = line.transformedVertices[0].position;
             Homogeneous4 &p2 = line.transformedVertices[1].position;
-            auto res1 = is_in_NDCS(p1);
-            auto res2 = is_in_NDCS(p2);
+            auto res1 = intersection_info(p1);
+            auto res2 = intersection_info(p2);
             if (res1 == INSIDE && res2 == INSIDE) {
                 // do nothing, just draw it
             } else if ((res1 & res2) != INSIDE) {
@@ -378,8 +387,8 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                     // get the cut point, update v2
                     v2 = cutLine(v1, v2, which_side);
                     // update side info
-                    res1 = is_in_NDCS(v1.position);
-                    res2 = is_in_NDCS(v2.position);
+                    res1 = intersection_info(v1.position);
+                    res2 = intersection_info(v2.position);
                 }
                 // udpate vertex on line
                 line.transformedVertices[0] = v1;
@@ -397,8 +406,7 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
         // avoid lock
         std::vector<std::vector<Primitive>> temp_res(primitives.size());
         for (int pri = 0; pri < primitives.size(); pri ++) {
-
-            tasks.emplace_back([pri, &temp_res, is_in_NDCS, cutLine, &primitives, &transform](){
+            tasks.emplace_back([pri, &temp_res, intersection_info, cutLine, &primitives, &transform](){
                 // clip a triangle:
                 // get the position info of vertices
                 auto tri = primitives[pri];
@@ -411,9 +419,9 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                     byte which_side = byte(1) << i;
                     // get location information on this side
                     for (int j = 0; j < side_infos.size(); j ++) {
-                        side_infos[j] = is_in_NDCS(current_vertices[j].position);
+                        side_infos[j] = intersection_info(current_vertices[j].position);
                     }
-                    // analise each line
+                    // analyse each line
                     for (int j = 0; j < side_infos.size();j ++) {
                         int begin = j;
                         int end = (j + 1) % side_infos.size();
@@ -520,7 +528,7 @@ void LeedsGL::rasterisePoint(int index, const Primitive &point, std::vector<Frag
     output[index].width = right - left + 1;
     output[index].height = top - bottom + 1;
     output[index].resize();
-    RGBAValueF color = calculateColor(vertex.color, Cartesian3(), vertex.normal, vertex.v_vcs);
+    RGBAValueF color = calculateColor(vertex.color, Cartesian3(), vertex.normal, vertex.v_vcs, 1.f / vertex.w);
     for (int x = 0; x < output[index].width; x++) {
         for (int y = 0; y < output[index].height; y++) {
             output[index].colors[y * output[index].width + x] = color;
@@ -646,7 +654,6 @@ void LeedsGL::rasteriseTriangle(int index, const Primitive &triangle, std::vecto
     rasterFragment.height = top - bottom + 1;
     // init the fragment buffer
     rasterFragment.resize();
-    TP::TaskGroup tasks;
     // loop through the pixels in the bounding box
     for (int y = 0; y < rasterFragment.height; y++) { // per row
         for (int x = 0; x < rasterFragment.width; x++) { // per pixel
@@ -676,7 +683,7 @@ void LeedsGL::rasteriseTriangle(int index, const Primitive &triangle, std::vecto
                     (vertex0.tex_coord * alpha + vertex1.tex_coord * beta + vertex2.tex_coord * gamma) / W;
             RGBAValueF color = (1.f / W) * (alpha * vertex0.color + beta * vertex1.color + gamma * vertex2.color);
             // get color at this pixel
-            rasterFragment.colors[y * rasterFragment.width + x] = calculateColor(color, tex_coords, n_vcs, v_vcs);
+            rasterFragment.colors[y * rasterFragment.width + x] = calculateColor(color, tex_coords, n_vcs, v_vcs, W);
             rasterFragment.depths[y * rasterFragment.width + x] = depth;
         } // per pixel
     } // per row
@@ -736,8 +743,12 @@ void LeedsGL::processFragments(std::vector<Fragment> &fragments) {
 RGBAValueF LeedsGL::calculateColor(const RGBAValueF &color,
                                    const Cartesian3 &uv,
                                    const Homogeneous4 &n_vcs,
-                                   const Homogeneous4 &v_vcs) {
+                                   const Homogeneous4 &v_vcs,
+                                   const float w) {
     RGBAValueF res;
+    if (UVColourDebug) {
+        return {uv.x, uv.y, w, 1};
+    }
     if (texturingEnabled) {
         // get texture color
         res = textureSampler(uv);

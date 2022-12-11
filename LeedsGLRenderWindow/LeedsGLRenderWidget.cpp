@@ -133,6 +133,7 @@ void LeedsGLRenderWidget::paintLeedsGL()
     } else {
         leedsGL.disable(LeedsGL::PARALLEL);
     }
+    leedsGL.setUniform("UVColorDebug",renderParameters->mapUVWToRGB);
 
     // clear the buffer
     leedsGL.clear(LeedsGL::COLORMASK | (renderParameters->depthTestOn ? LeedsGL::DEPTHMASK: std::byte{0}));
@@ -238,8 +239,6 @@ void LeedsGLRenderWidget::paintLeedsGL()
         leedsGL.setUniform("diffuseMaterial",RGBAValueF(renderParameters->diffuseMaterial,renderParameters->diffuseMaterial,renderParameters->diffuseMaterial));
         leedsGL.setUniform("specularMaterial",RGBAValueF(renderParameters->specularMaterial,renderParameters->specularMaterial,renderParameters->specularMaterial));
         leedsGL.setUniform("shininessMaterial",renderParameters->specularExponent);
-
-        leedsGL.setUniform("UVColorDebug",renderParameters->mapUVWToRGB);
 
         texturedObject->LeedsGLRender(leedsGL);
 
