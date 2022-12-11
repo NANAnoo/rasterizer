@@ -89,7 +89,7 @@ class RenderParameters
         // start the lighting at the viewer's direction
         lightPosition[0] = 0.0f;
         lightPosition[1] = 0.0f;
-        lightPosition[2] = 1.0f;
+        lightPosition[2] = -1.0f;
         lightPosition[3] = 0.0f;
 
         // because we are paranoid, we will initialise the matrices to the identity

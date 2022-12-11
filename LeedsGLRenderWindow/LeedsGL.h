@@ -28,7 +28,7 @@ struct InputVertex {
     // position
     Homogeneous4 position;
     // normal
-    Cartesian3 normal;
+    Homogeneous4 normal;
     // color
     RGBAValueF color;
     // texture coords

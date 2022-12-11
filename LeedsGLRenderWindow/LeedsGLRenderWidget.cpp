@@ -116,7 +116,7 @@ void LeedsGLRenderWidget::paintLeedsGL()
     }else{
         leedsGL.disable(LeedsGL::PERSPECTIVE);
         if (aspectRatio > 1.0f)
-            P =  LeedsGLUtils::calculateProjectionOrtho(-aspectRatio, aspectRatio, -1.0f, 1.0f, 0.0f, 1.0f);
+            P =  LeedsGLUtils::calculateProjectionOrtho(-aspectRatio, aspectRatio, -1.0f, 1.0f, 0.0f, 2.0f);
         // otherwise, make left & right -1.0 & 1.0
         else
             P =  LeedsGLUtils::calculateProjectionOrtho(-1.0f, 1.0f, -1.0f/aspectRatio, 1.0f/aspectRatio, 0.0f, 1.0f);

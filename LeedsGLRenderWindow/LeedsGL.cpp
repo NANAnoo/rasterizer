@@ -22,7 +22,11 @@ using std::byte;
 using std::string;
 
 LeedsGL::LeedsGL() {
+#ifdef DEBUG
+    this->pool = new ThreadPool(1);
+#else
     this->pool = new ThreadPool(std::thread::hardware_concurrency());
+#endif
     this->texture = nullptr;
 }
 
@@ -172,15 +176,12 @@ LeedsGLUtils::calculateProjectionFrustum(float left, float right, float bottom, 
     return fr;
 }
 
-
 void LeedsGL::texImage2D(RGBAImage const *textureImage) {
-    //TODO: set in your pipeline which texture should be used to render.
     //Parameter is a pointer to the texture, be aware of how it is stored, and ownership of the resources.
     texture = textureImage;
 }
 
 void LeedsGL::enable(const std::byte function) {
-    //TODO: enables a pipeline function described by the byte parameter.
     if ((function & PERSPECTIVE) != UNKNOWN_MASK) {
         perspective = true;
     } else if ((function & DEPTHTEST) != UNKNOWN_MASK) {
@@ -189,7 +190,6 @@ void LeedsGL::enable(const std::byte function) {
 }
 
 void LeedsGL::disable(const std::byte function) {
-    //TODO: disables a pipeline function described by the byte parameter.
     if ((function & PERSPECTIVE) != UNKNOWN_MASK) {
         perspective = false;
     } else if ((function & DEPTHTEST) != UNKNOWN_MASK) {
@@ -198,12 +198,10 @@ void LeedsGL::disable(const std::byte function) {
 }
 
 void LeedsGL::lineWidth(const float width) {
-    //TODO: Set a variable that describes what is the width in pixels of the line to be rasterized.
     rasterizedLineWidth = width;
 }
 
 void LeedsGL::pointSize(const float size) {
-    //TODO: Set a variable that describes what is the size in pixels of the point to be rasterized.
     rasterizedPointSize = size;
 }
 
@@ -246,8 +244,10 @@ void LeedsGL::inputAssembly(const std::vector<Homogeneous4> &vertices, const std
         tasks.emplace_back([i, &vertices, &normals,
                                    &textureCoordinates, &colors, &result]() {
             result[i].position = vertices[i];
-            if (i < normals.size())
-                result[i].normal = normals[i].Vector();
+            if (i < normals.size()) {
+                result[i].normal = normals[i];
+                result[i].normal.w = 0;
+            }
             if (i < textureCoordinates.size())
                 result[i].tex_coord = textureCoordinates[i];
             if (i < colors.size())
@@ -262,20 +262,20 @@ void LeedsGL::transformVertices(std::vector<InputVertex> &vertices, std::vector<
     //You should check the slides to decide which is the appropriate coordinate system to transform them to.
     // transform all position into NDCS, since camera is always on center
     TicTok t("transformVertices");
-    Matrix4 view;
-    // look in the negative of z axis
-    view.SetScale(1, 1, -1);
-    Matrix4 mvp = projectionMatrix * view * modelviewMatrix;
-    Matrix4 mv = view * modelviewMatrix;
+    Matrix4 trans;
+    // translate the CS into right hand
+    trans.SetScale(1, 1, -1);
+    Matrix4 mvp = projectionMatrix * trans * modelviewMatrix;
+    Matrix4 mv = trans * modelviewMatrix;
     TaskGroup tasks;
     result.resize(vertices.size());
     for (unsigned int i = 0; i < vertices.size(); i++) {
-        tasks.emplace_back([i, &vertices, &result, &mvp, &mv, this]() {
+        tasks.emplace_back([i, &vertices, &result, &mvp, &mv]() {
             // Transform position and normal
             result[i].position = mvp * vertices[i].position;
             result[i].w = result[i].position.w;
             result[i].v_vcs = mv * vertices[i].position;
-            result[i].normal = mv * vertices[i].normal;
+            result[i].normal = (mv * vertices[i].normal).Vector();
             result[i].color = vertices[i].color;
             result[i].tex_coord = vertices[i].tex_coord;
         });
@@ -285,7 +285,6 @@ void LeedsGL::transformVertices(std::vector<InputVertex> &vertices, std::vector<
 
 void
 LeedsGL::primitiveAssembly(std::vector<TransformedVertex> &vertices, std::byte mode, std::vector<Primitive> &result) {
-    //TODO: Assemble the vertices into a primitive according to the selected mode.
     TicTok t("primitiveAssembly");
     int strip_step = int(mode) - 4;
     TaskGroup tasks;
@@ -303,7 +302,6 @@ LeedsGL::primitiveAssembly(std::vector<TransformedVertex> &vertices, std::byte m
 }
 
 void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, std::vector<Primitive> &result) {
-    //TODO: Implement clipping and culling. Should have a different behavior for each type of primitive.
     //Pay attention to what type of projection you are using, as your clipping planes will be different.
     //If you choose to skip this step as it is one of your last tasks, just return all the same primitives.
     const byte INSIDE{0}, LEFT{1}, RIGHT{2}, BOTTOM{4}, TOP{8}, FRONT{16}, BACK{32};
@@ -321,16 +319,39 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
         if (p.y < -1) res |= BOTTOM; else if (p.y > 1) res |= TOP;
         return res;
     };
-    // F2. calculate intersection point between line && a face
-    const auto intersectionPoint =
-            [](Homogeneous4 &point) {
-
-            };
-    // F3. convert position to DCS
+    // convert position to DCS
     const auto transform = [this](Homogeneous4 &position) {
         position = viewPortMatrix * position;
         position = position / position.w;
     };
+    // cut a line with a given surface
+    // return an interpaloted vertex
+    const auto cutLine =
+            [](const TransformedVertex &v0, const TransformedVertex &v1, byte mode) {
+                float alpha = 0;
+                if (mode == FRONT) {
+                    alpha = (0 - v1.position.z) / (v0.position.z - v1.position.z);
+                } else if (mode == BACK) {
+                    alpha = (1 - v1.position.z) / (v0.position.z - v1.position.z);
+                } else if (mode == LEFT) {
+                    alpha = (-1 - v1.position.x) / (v0.position.x - v1.position.x);
+                } else if (mode == RIGHT) {
+                    alpha = (1 - v1.position.x) / (v0.position.x - v1.position.x);
+                } else if (mode == BOTTOM) {
+                    alpha = (-1 - v1.position.y) / (v0.position.y - v1.position.y);
+                } else if (mode == TOP) {
+                    alpha = (1 - v1.position.y) / (v0.position.y - v1.position.y);
+                }
+                float beta = 1 - alpha;
+                TransformedVertex res;
+                res.position = alpha * v0.position + beta * v1.position;
+                res.v_vcs = alpha * v0.v_vcs + beta * v1.v_vcs;
+                res.color = alpha * v0.color + beta * v1.color;
+                res.normal = alpha * v0.normal + beta * v1.normal;
+                res.tex_coord = alpha * v0.tex_coord + beta * v1.tex_coord;
+                res.w = res.position.w;
+                return res;
+            };
     // clear previous data;
     result.clear();
     if (mode == POINTS) {
@@ -355,8 +376,31 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                 continue;
             } else {
                 // part inside
-                // TODO: update start & end position according to the intersection info
-                continue;
+                // for each side
+                auto v1 =  line.transformedVertices[0];
+                auto v2 =  line.transformedVertices[1];
+                for (int i = 0; i < 6; i ++) {
+                    // calculate side
+                    byte which_side = byte(1) << i;
+                    if ((res1 & which_side) == INSIDE && (res2 & which_side) == INSIDE) {
+                        // both are on same side of this line
+                        // no need to cut
+                        continue;
+                    }
+                    if ((res1 & which_side) != INSIDE) {
+                        // v2 is in side, swap the two point
+                        std::swap(v1, v2);
+                    }
+                    // v1 inside, v2 outside
+                    // get the cut point, update v2
+                    v2 = cutLine(v1, v2, which_side);
+                    // update side info
+                    res1 = is_in_NDCS(v1.position);
+                    res2 = is_in_NDCS(v2.position);
+                }
+                // udpate vertex on line
+                line.transformedVertices[0] = v1;
+                line.transformedVertices[1] = v2;
             }
             // draw the clipped line
             // transform it into DCS
@@ -366,13 +410,83 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
 
         }
     } else if (mode == TRIANGLES) {
-        // TODO: TRIANGLE clips
-        for (auto &tri: primitives) {
-            // transform it into DCS
-            transform(tri.transformedVertices[0].position);
-            transform(tri.transformedVertices[1].position);
-            transform(tri.transformedVertices[2].position);
-            result.push_back(tri);
+        TaskGroup tasks;
+        // avoid lock
+        std::vector<std::vector<Primitive>> temp_res(primitives.size());
+        for (int pri = 0; pri < primitives.size(); pri ++) {
+
+            tasks.emplace_back([pri, &temp_res, is_in_NDCS, cutLine, &primitives, &transform](){
+                // clip a triangle:
+                // get the position info of vertices
+                auto tri = primitives[pri];
+                std::vector<TransformedVertex> clipped_vertices;
+                // current_vertices contains a polygon from previous iteration
+                std::vector<TransformedVertex> current_vertices = tri.transformedVertices;
+                for (int i = 0; i < 6; i ++) {
+                    std::vector<byte> side_infos(current_vertices.size());
+                    // calculate side
+                    byte which_side = byte(1) << i;
+                    // get location information on this side
+                    for (int j = 0; j < side_infos.size(); j ++) {
+                        side_infos[j] = is_in_NDCS(current_vertices[j].position);
+                    }
+                    // analise each line
+                    for (int j = 0; j < side_infos.size();j ++) {
+                        int begin = j;
+                        int end = (j + 1) % side_infos.size();
+                        auto begin_v = current_vertices[begin];
+                        auto end_v = current_vertices[end];
+                        bool begin_inside = (side_infos[begin] & which_side) == INSIDE;
+                        bool end_inside = (side_infos[end] & which_side) == INSIDE;
+                        if (begin_inside && end_inside) {
+                            // both are inside, add to clipped_vertices
+                            clipped_vertices.push_back(begin_v);
+                            // push the first one, the next one will be added in next iteration
+                            // clipped_vertices.push_back(end_v);
+                        } else if (!begin_inside && !end_inside) {
+                            // both are outside, throw them
+                            continue;
+                        } else {
+                            // one inside, one out side
+                            auto intersection = cutLine(begin_v, end_v, which_side);
+                            // add points in order
+                            if (begin_inside) {
+                                clipped_vertices.push_back(begin_v);
+                                clipped_vertices.push_back(intersection);
+                            } else {
+                                clipped_vertices.push_back(intersection);
+                                // the next one will be added in next iteration
+                                // clipped_vertices.push_back(end_v);
+                            }
+                        }
+                    }
+                    // cut finished on this side
+                    // update current infos
+                    current_vertices = clipped_vertices;
+                    clipped_vertices.clear();
+                }
+                for (auto &v : current_vertices) {
+                    // transform position into DCS
+                    transform(v.position);
+                }
+                // generate triangles from current_vertices;
+                // 0, 1, 2
+                // 0, 2, 3
+                // ...
+                // 0, n-1, n
+                // lock result
+                for (int j = 2; j < current_vertices.size(); j ++) {
+                    Primitive new_tri;
+                    new_tri.transformedVertices = {current_vertices[0],current_vertices[j-1], current_vertices[j]};
+                    temp_res[pri].push_back(new_tri);
+                }
+            });
+        }
+        pool->syncGroup(tasks);
+        for (auto &res:temp_res) {
+            for (auto &tri : res) {
+                result.push_back(tri);
+            }
         }
     }
 }
@@ -427,6 +541,50 @@ void LeedsGL::rasterisePoint(int index, const Primitive &point, std::vector<Frag
 void LeedsGL::rasteriseLine(int index, const Primitive &line, std::vector<Fragment> &output) {
     // treat the line as a quad and change it into triangles
     // then rasterise Triangles
+    TransformedVertex v0 = line.transformedVertices[0];
+    TransformedVertex v1 = line.transformedVertices[1];
+    Homogeneous4 direction = v0.position - v1.position;
+    Cartesian3 normal(direction.y, -direction.x, 0);
+    // use the padding to get a rect
+    Cartesian3 padding = rasterizedLineWidth * normal.unit() / 2;
+    // calculate the four position of the rect
+    TransformedVertex start_0, start_1, end_0, end_1;
+    start_0.position = v0.position + padding;
+    start_0.normal = v0.normal;
+    start_0.w = v0.w;
+    start_0.color = v0.color;
+    start_0.v_vcs = v0.v_vcs;
+    start_0.tex_coord = v0.tex_coord;
+
+    start_1.position = v0.position - padding;
+    start_1.normal = v0.normal;
+    start_1.w = v0.w;
+    start_1.color = v0.color;
+    start_1.v_vcs = v0.v_vcs;
+    start_1.tex_coord = v0.tex_coord;
+
+    end_0.position = v1.position + padding;
+    end_0.normal = v1.normal;
+    end_0.w = v1.w;
+    end_0.color = v1.color;
+    end_0.v_vcs = v1.v_vcs;
+    end_0.tex_coord = v1.tex_coord;
+
+    end_1.position = v1.position - padding;
+    end_1.normal = v1.normal;
+    end_1.w = v1.w;
+    end_1.color = v1.color;
+    end_1.v_vcs = v1.v_vcs;
+    end_1.tex_coord = v1.tex_coord;
+
+    // get result of two triangles
+    int size = output.size();
+    // append one fragment to draw an extra triangle
+    output.resize(size + 1);
+    // draw one at index
+    rasteriseTriangle(index, {{start_1, start_0, end_0}}, output);
+    // draw another at the end of output
+    rasteriseTriangle(size, {{end_0, end_1, start_1}}, output);
 }
 
 
@@ -516,14 +674,15 @@ void LeedsGL::rasteriseTriangle(int index, const Primitive &triangle, std::vecto
                 continue;
 
             //Be aware of making sure they are perspective correct.
-            // interpolation normal_vcs, v_vcs, tex_coords, dpeth and color (if there is no texture)
+            // interpolation normal_vcs, v_vcs, tex_coords, depth and color (if there is no texture)
             float W = alpha / vertex0.w + beta / vertex1.w + gamma / vertex2.w;
             float depth = alpha * vertex0.position.z + beta * vertex1.position.z + gamma * vertex2.position.z;
             // update alpha beta gamma, Hyperbolic interpolation
             alpha = alpha / vertex0.w, beta = beta / vertex1.w, gamma = gamma / vertex2.w;
-            Homogeneous4 n_vcs = (vertex0.normal * alpha +vertex1.normal * beta +vertex2.normal * gamma) / W;
+            Homogeneous4 n_vcs = (vertex0.normal * alpha + vertex1.normal * beta + vertex2.normal * gamma) / W;
             Homogeneous4 v_vcs = (vertex0.v_vcs * alpha + vertex1.v_vcs * beta + vertex2.v_vcs * gamma) / W;
-            Cartesian3 tex_coords = (vertex0.tex_coord * alpha + vertex1.tex_coord * beta + vertex2.tex_coord * gamma) / W;
+            Cartesian3 tex_coords =
+                    (vertex0.tex_coord * alpha + vertex1.tex_coord * beta + vertex2.tex_coord * gamma) / W;
             RGBAValueF color = (1.f / W) * (alpha * vertex0.color + beta * vertex1.color + gamma * vertex2.color);
             // get color at this pixel
             rasterFragment.colors[y * rasterFragment.width + x] = calculateColor(color, tex_coords, n_vcs, v_vcs);
@@ -563,9 +722,6 @@ void LeedsGL::processFragments(std::vector<Fragment> &fragments) {
                     int px = frag.col + x, py = frag.row + y;
                     int depth_index = py * int(swapBuffer.width) + px;
                     int frag_pixel_index = y * frag.width + x;
-                    if (px == 368 && py == 342) {
-                        std::cout << frag.depths[frag_pixel_index] <<std::endl;
-                    }
                     // depth test
                     if (depthTestEnabled) {
                         if (depthBuffer[depth_index] > frag.depths[frag_pixel_index]) {
@@ -584,7 +740,6 @@ void LeedsGL::processFragments(std::vector<Fragment> &fragments) {
             }
         }
     }
-    swapBuffer[342][368] = {1, 1, 1, 1};
 }
 
 RGBAValueF LeedsGL::calculateColor(const RGBAValueF &color,
@@ -595,7 +750,7 @@ RGBAValueF LeedsGL::calculateColor(const RGBAValueF &color,
     if (texturingEnabled) {
         // get texture color
         res = textureSampler(uv);
-        if (textureModulationEnabled) {
+        if (textureModulationEnabled && lightingEnabled) {
             // calculate light color
             RGBAValueF light_color = CalculateLighting(n_vcs, v_vcs, emissiveMaterial,
                                                        ambientMaterial,
@@ -606,7 +761,7 @@ RGBAValueF LeedsGL::calculateColor(const RGBAValueF &color,
             res = res.modulate(light_color);
         }
     } else {
-        if (lightingEnabled) {
+        if (lightingEnabled && !(n_vcs.x == 0.0f && n_vcs.y == 0.0f && n_vcs.z == 0.0f)) {
             // only use light color, if texture is disabled
             res = CalculateLighting(n_vcs, v_vcs, emissiveMaterial,
                                     ambientMaterial,
@@ -631,13 +786,15 @@ RGBAValueF LeedsGL::CalculateLighting(const Homogeneous4 &n_vcs, const Homogeneo
     Cartesian3 unitNormal = n_vcs.Vector().unit();
     //Directional Light
 
-    Homogeneous4 lp = lightMatrix * lightPosition;
+    Matrix4 trans;
+    trans.SetScale(-1, -1, 1); // transform it into right hand
+    Homogeneous4 lp = (trans * lightMatrix) * lightPosition;
 
     if (abs(lp.w - 0) < std::numeric_limits<float>::epsilon())
         lightVector = lp.Vector().unit();
     else //point light
         lightVector = (lp - v_vcs).Vector().unit();
-    Cartesian3 eyeVector = perspective ? -1 * v_vcs.Point() : Cartesian3(0, 0, 1);
+    Cartesian3 eyeVector = perspective ? -1 * v_vcs.Point() : Cartesian3(0, 0, -1);
     Cartesian3 bisector = (lightVector + eyeVector).unit();
 
     RGBAValueF emissive = em;
