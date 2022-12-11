@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <pthread.h>
+#include <condition_variable>
 
 namespace TP {
     typedef std::function<void(void)> Task;
@@ -70,7 +71,6 @@ namespace TP {
         std::mutex mux;
         std::condition_variable thread_returned;
         std::thread::id tid;
-        std::string name;
         bool is_running;
         bool thread_stopped;
 
@@ -105,17 +105,6 @@ namespace TP {
             t.detach();
         }
 
-        void setName(std::string n) {
-            std::unique_lock<std::mutex> lock(mux);
-            this->name = n;
-        }
-
-        std::string getName() {
-            std::unique_lock<std::mutex> lock(mux);
-            return this->name;
-        }
-
-
         void stop() {
             isRunning(false);
             std::unique_lock<std::mutex> lock(mux);
@@ -135,10 +124,6 @@ namespace TP {
 
         // main loop
         void mainLoop() {
-            std::string n = getName();
-            if (n.size() > 0) {
-                pthread_setname_np(getName().c_str());
-            }
             do {
                 if (isRunning() && !queue.empty()) {
                     Task task = *(queue.pop());
@@ -153,7 +138,6 @@ namespace TP {
             thread_returned.notify_one();
         }
     };
-static int wid = 0;
     class ThreadPool {
     private:
         TSafeQueue<Task> queue;
@@ -168,7 +152,6 @@ static int wid = 0;
             current_index = 0;
             for (unsigned int i = 0; i < count; i++) {
                 auto *worker = new WorkerThread();
-                worker->setName("nano" + std::to_string(wid++));
                 worker->run();
                 workers.push_back(worker);
             }

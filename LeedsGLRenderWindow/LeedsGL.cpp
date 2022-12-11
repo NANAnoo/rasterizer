@@ -129,7 +129,7 @@ void LeedsGL::resizeBuffers(unsigned const int width, unsigned const int height)
 #ifdef __APPLE__
     // pixel scale on macos
     swapBuffer.Resize(width / 2, height / 2);
-#elif
+#else
     swapBuffer.Resize(width, height);
 #endif
     frameBuffer.Resize(width, height);

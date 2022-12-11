@@ -15,6 +15,7 @@
 ///////////////////////////////////////////////////
 
 #include "RGBAValueF.h"
+#include <limits>
 
 using namespace std;
 
