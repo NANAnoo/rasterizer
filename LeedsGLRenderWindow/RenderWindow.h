@@ -102,6 +102,10 @@ class RenderWindow : public QWidget
     QCheckBox                   *scaleObjectBox;
     QCheckBox                   *mapUVWToRGBBox;
     QCheckBox                   *perspectiveBox;
+    
+
+    // check box for concurrency
+    QCheckBox                   *parallelBox;
 
 
     // sliders for spatial manipulation

@@ -88,6 +88,9 @@ class RenderController : public QObject
     void specularLightChanged(int value);
     void specularExponentChanged(int value);
 
+    // slot for parallel
+    void parallelCheckChanged(int value);
+
     // slots for responding to arcball manipulations
     // these are general purpose signals which pass the mouse moves to the controller
     // after scaling to the notional unit sphere

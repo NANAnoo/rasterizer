@@ -63,6 +63,9 @@ class RenderParameters
     bool scaleObject;
     bool mapUVWToRGB;
 
+    // bool enable concurrency
+    bool concurrencyEnable;
+
     // constructor
     RenderParameters()
         :
@@ -83,7 +86,8 @@ class RenderParameters
         centreObject(false),
         perspective(true),
         scaleObject(false),
-        mapUVWToRGB(false)
+        mapUVWToRGB(false),
+        concurrencyEnable(true)
         { // constructor
         
         // start the lighting at the viewer's direction

@@ -127,6 +127,12 @@ void LeedsGLRenderWidget::paintLeedsGL()
         leedsGL.enable(LeedsGL::DEPTHTEST);
     else
         leedsGL.disable(LeedsGL::DEPTHTEST);
+    
+    if (renderParameters->concurrencyEnable) {
+        leedsGL.enable(LeedsGL::PARALLEL);
+    } else {
+        leedsGL.disable(LeedsGL::PARALLEL);
+    }
 
     // clear the buffer
     leedsGL.clear(LeedsGL::COLORMASK | (renderParameters->depthTestOn ? LeedsGL::DEPTHMASK: std::byte{0}));

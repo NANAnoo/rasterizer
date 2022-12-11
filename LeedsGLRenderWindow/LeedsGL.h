@@ -178,6 +178,8 @@ public:
     static const std::byte POINTS{5};
     static const std::byte LINES{6};
     static const std::byte TRIANGLES{7};
+    // parallel
+    static const std::byte PARALLEL{8};
 
 private:
 
@@ -208,6 +210,7 @@ private:
     RGBAValueF bufferClearColor;
     bool depthTestEnabled;
     bool perspective;
+    bool concurrencyEnable;
 
 //Queues
     std::vector<InputVertex> inputQueue;

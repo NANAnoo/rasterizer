@@ -22,11 +22,7 @@ using std::byte;
 using std::string;
 
 LeedsGL::LeedsGL() {
-#ifdef DEBUG
-    this->pool = new ThreadPool(1);
-#else
     this->pool = new ThreadPool(std::thread::hardware_concurrency());
-#endif
     this->texture = nullptr;
 }
 
@@ -171,6 +167,8 @@ void LeedsGL::enable(const std::byte function) {
         perspective = true;
     } else if ((function & DEPTHTEST) != UNKNOWN_MASK) {
         depthTestEnabled = true;
+    } else if((function & PARALLEL) != UNKNOWN_MASK) {
+        concurrencyEnable = true;
     }
 }
 
@@ -179,6 +177,8 @@ void LeedsGL::disable(const std::byte function) {
         perspective = false;
     } else if ((function & DEPTHTEST) != UNKNOWN_MASK) {
         depthTestEnabled = false;
+    } else if((function & PARALLEL) != UNKNOWN_MASK) {
+        concurrencyEnable = false;
     }
 }
 
@@ -225,7 +225,11 @@ void LeedsGL::inputAssembly(const std::vector<Homogeneous4> &vertices, const std
                 result[i].color = colors[i];
         });
     }
-    this->pool->syncGroup(tasks);
+    if (concurrencyEnable) 
+        this->pool->syncGroup(tasks);
+    else
+    // set 0 to disable parallel
+        this->pool->syncGroup(tasks, 0);
 }
 
 void LeedsGL::transformVertices(std::vector<InputVertex> &vertices, std::vector<TransformedVertex> &result) {
@@ -251,7 +255,11 @@ void LeedsGL::transformVertices(std::vector<InputVertex> &vertices, std::vector<
             result[i].tex_coord = vertices[i].tex_coord;
         });
     }
-    this->pool->syncGroup(tasks);
+    if (concurrencyEnable) 
+        this->pool->syncGroup(tasks);
+    else
+    // set 0 to disable parallel
+        this->pool->syncGroup(tasks, 0);
 }
 
 void
@@ -269,7 +277,11 @@ LeedsGL::primitiveAssembly(std::vector<TransformedVertex> &vertices, std::byte m
             }
         });
     }
-    this->pool->syncGroup(tasks);
+    if (concurrencyEnable) 
+        this->pool->syncGroup(tasks);
+    else
+    // set 0 to disable parallel
+        this->pool->syncGroup(tasks, 0);
 }
 
 void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, std::vector<Primitive> &result) {
@@ -453,7 +465,11 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                 }
             });
         }
-        pool->syncGroup(tasks);
+        if (concurrencyEnable) 
+            this->pool->syncGroup(tasks);
+        else
+        // set 0 to disable parallel
+            this->pool->syncGroup(tasks, 0);
         for (auto &res:temp_res) {
             for (auto &tri : res) {
                 result.push_back(tri);
@@ -480,7 +496,11 @@ void LeedsGL::rasterisePrimitives(std::vector<Primitive> &primitives, std::byte 
             });
         }
     }
-    pool->syncGroup(tasks);
+    if (concurrencyEnable) 
+        this->pool->syncGroup(tasks);
+    else
+    // set 0 to disable parallel
+        this->pool->syncGroup(tasks, 0);
 }
 
 void LeedsGL::rasterisePoint(int index, const Primitive &point, std::vector<Fragment> &output) {

@@ -128,6 +128,10 @@ RenderController::RenderController
     QObject::connect(   renderWindow->perspectiveBox,               SIGNAL(stateChanged(int)),
                         this,                                       SLOT(perspectiveCheckChanged(int)));
 
+    //signal for parallel
+    QObject::connect(   renderWindow->parallelBox,                  SIGNAL(stateChanged(int)),
+                        this,                                       SLOT(parallelCheckChanged(int)));
+
     // copy the rotation matrix from the widgets to the model
     renderParameters->rotationMatrix = renderWindow->modelRotator->RotationMatrix();
     renderParameters->lightMatrix = renderWindow->lightRotator->RotationMatrix();
@@ -370,6 +374,12 @@ void RenderController::perspectiveCheckChanged(int state)
     renderWindow->ResetInterface();
     } // RenderController::scaleObjectCheckChanged()
 
+void RenderController::parallelCheckChanged(int state) 
+    { // RenderController::parallelCheckChanged
+    renderParameters->concurrencyEnable = (state == Qt::Checked);
+    // reset the interface
+    renderWindow->ResetInterface();
+    } // RenderController::parallelCheckChanged
 
 void RenderController::scaleObjectCheckChanged(int state)
     { // RenderController::scaleObjectCheckChanged()

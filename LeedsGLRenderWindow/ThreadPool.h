@@ -14,6 +14,7 @@ namespace TP {
     typedef std::vector<std::function<void(void)> > TaskGroup;
     template<typename T>
     class TSafeQueue {
+        // a thread safe queue
     private:
         std::mutex mut;
         std::queue<T> data_queue;
@@ -65,6 +66,7 @@ namespace TP {
     };
 
     class WorkerThread {
+        // a worker thread
     private:
         TSafeQueue<Task> queue;
         std::thread t;
@@ -108,6 +110,7 @@ namespace TP {
         void stop() {
             isRunning(false);
             std::unique_lock<std::mutex> lock(mux);
+            // wait for the thread finish all works
             thread_returned.wait(lock, [this] {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 return thread_stopped;

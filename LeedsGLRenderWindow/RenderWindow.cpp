@@ -72,6 +72,9 @@ RenderWindow::RenderWindow
     showObjectBox               = new QCheckBox                 ("Object",              this);  
     centreObjectBox             = new QCheckBox                 ("Centre",              this);
     scaleObjectBox              = new QCheckBox                 ("Scale",               this);
+
+    // parallel option
+    parallelBox                 = new QCheckBox                 ("Parallel",            this);
     
     // spatial sliders
     xTranslateSlider            = new QSlider                   (Qt::Horizontal,        this);
@@ -120,6 +123,7 @@ RenderWindow::RenderWindow
     windowLayout->addWidget(texturedRenderingBox,       11,         4,          1,          1           );
     windowLayout->addWidget(textureModulationBox,       12,         4,          1,          1           );
     windowLayout->addWidget(perspectiveBox,	 	    13,         4,          1,          1           );
+    windowLayout->addWidget(parallelBox,                14,         4,          1,          1           );
 
 
     // Translate Slider Row
@@ -172,6 +176,7 @@ void RenderWindow::ResetInterface()
     centreObjectBox         ->setChecked        (renderParameters   ->  centreObject);
     scaleObjectBox          ->setChecked        (renderParameters   ->  scaleObject);
     perspectiveBox          ->setChecked        (renderParameters   ->  perspective);
+    parallelBox             ->setChecked        (renderParameters   ->  concurrencyEnable);
 
     // set sliders
     // x & y translate are scaled to notional unit sphere in render widgets
@@ -233,5 +238,6 @@ void RenderWindow::ResetInterface()
     centreObjectBox         ->update();
     scaleObjectBox          ->update();
     perspectiveBox          ->update();
+    parallelBox             ->update();
     } // RenderWindow::ResetInterface()
 
