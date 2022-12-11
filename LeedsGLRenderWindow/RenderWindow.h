@@ -35,41 +35,6 @@
 // and a second widget which the student will edit
 #include "LeedsGLRenderWidget.h"
 
-#ifdef __APPLE__
-
-class MySlider : public QSlider
-{
-    void updateFromEvent(QMouseEvent * event) {
-        event->accept();
-        this->setFocus(Qt::TabFocusReason);
-        int value = 0;
-        int length = this->maximum() - this->minimum();
-        if (this->orientation() == Qt::Horizontal) {
-            value = int(float(event->x())  / float(this->width()) * float(length)) + this->minimum();
-        } else {
-            value = this->maximum() - int(float(event->y())  / float(this->height()) * float(length));
-        }
-        this->setSliderPosition(value);
-    }
-
-    void mousePressEvent(QMouseEvent * event) override {
-        updateFromEvent(event);
-    }
-
-    void mouseMoveEvent(QMouseEvent * event) override {
-        updateFromEvent(event);
-    }
-
-public:
-    MySlider(Qt::Orientation orientation, QWidget *pWindow) : QSlider(orientation, pWindow) {
-
-    }
-};
-
-#define QSlider MySlider
-
-#endif
-
 // a window that displays an geometric model with controls
 class RenderWindow : public QWidget
     { // class RenderWindow

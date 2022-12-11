@@ -2,6 +2,7 @@
 #include <math.h>
 
 struct TicTok {
+    // a timer to measure the time consuming of each step
     const char *label;
     std::chrono::steady_clock::time_point start;
 
@@ -121,10 +122,6 @@ void LeedsGL::resizeBuffers(unsigned const int width, unsigned const int height)
 
 Matrix4 LeedsGLUtils::calculateViewportMatrix(float cx, float cy, float width, float height) {
     //performs the viewport transformation. NDCS -> DCS.
-#ifdef __APPLE__
-    width = width / 2;
-    height = height / 2;
-#endif
     Matrix4 vp;
     vp[0][0] = width / 2, vp[0][1] = 0, vp[0][2] = 0, vp[0][3] = (cx + 1) * width / 2;
     vp[1][0] = 0, vp[1][1] = height / 2, vp[1][2] = 0, vp[1][3] = (cy + 1) * height / 2;

@@ -31,11 +31,7 @@
 // include the C++ standard libraries we need for the header
 #include <vector>
 #include <iostream>
-#ifdef __APPLE__
-#include <OpenGL/gl.h>
-#else
 #include <GL/gl.h>
-#endif
 
 // and also include our fake GL library
 #include "LeedsGL.h"

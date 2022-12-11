@@ -50,11 +50,6 @@ void LeedsGLRenderWidget::initializeGL()
 // called every time the widget is resized
 void LeedsGLRenderWidget::resizeGL(int w, int h)
 {
-#ifdef __APPLE__
-    w = 2 * std::max(w,0);
-    h = 2 * std::max(h,0);
-#endif
-
     // resize the render images
     leedsGL.resizeBuffers(static_cast<unsigned int>(w), static_cast<unsigned int>(h));
     // reset the Matrices
