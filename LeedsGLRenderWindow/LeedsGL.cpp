@@ -41,19 +41,10 @@ void LeedsGL::clear(byte mask) {//Look at the usage of this function on LeedsGLR
     //tell which buffer to clear.
 
     if ((mask & COLORMASK) != UNKNOWN_MASK) {
-        // clear swapBuffer
-        for (int i = 0; i < swapBuffer.height; i++) {
-            for (int j = 0; j < swapBuffer.width; j++) {
-                swapBuffer[i][j] = bufferClearColor;
-#ifdef __APPLE__
-                // pixel resize on mac
-                frameBuffer[2 * i][2 * j] = swapBuffer[i][j];
-                frameBuffer[2 * i + 1][2 * j] = swapBuffer[i][j];
-                frameBuffer[2 * i][2 * j + 1] = swapBuffer[i][j];
-                frameBuffer[2 * i + 1][2 * j + 1] = swapBuffer[i][j];
-#else
-                frameBuffer[i][j] = swapBuffer[i][j];
-#endif
+        // clear buffer
+        for (int i = 0; i < frameBuffer.height; i++) {
+            for (int j = 0; j < frameBuffer.width; j++) {
+                frameBuffer[i][j] = bufferClearColor;
             }
         }
     }
@@ -126,12 +117,6 @@ void LeedsGL::clearColor(const RGBAValueF &col) {
 }
 
 void LeedsGL::resizeBuffers(unsigned const int width, unsigned const int height) {
-#ifdef __APPLE__
-    // pixel scale on macos
-    swapBuffer.Resize(width / 2, height / 2);
-#else
-    swapBuffer.Resize(width, height);
-#endif
     frameBuffer.Resize(width, height);
     // resize depth buffer
     // set every value as infinity
@@ -215,20 +200,6 @@ void LeedsGL::drawArrays(const std::vector<Homogeneous4> &vertices, const std::v
     clipAndCull(primitivesQueue, mode, clippedPrimitivesQueue);
     rasterisePrimitives(clippedPrimitivesQueue, mode, fragmentQueue);
     processFragments(fragmentQueue);
-    // swap buffer
-    for (int i = 0; i < swapBuffer.height; i++) {
-        for (int j = 0; j < swapBuffer.width; j++) {
-#ifdef __APPLE__
-            // pixel resize on mac
-            frameBuffer[2 * i][2 * j] = swapBuffer[i][j];
-            frameBuffer[2 * i + 1][2 * j] = swapBuffer[i][j];
-            frameBuffer[2 * i][2 * j + 1] = swapBuffer[i][j];
-            frameBuffer[2 * i + 1][2 * j + 1] = swapBuffer[i][j];
-#else
-            frameBuffer[i][j] = swapBuffer[i][j];
-#endif
-        }
-    }
 }
 
 void LeedsGL::inputAssembly(const std::vector<Homogeneous4> &vertices, const std::vector<Homogeneous4> &normals,
@@ -520,10 +491,10 @@ void LeedsGL::rasterisePoint(int index, const Primitive &point, std::vector<Frag
         return std::max(min, std::min(in, max));
     };
     // calculate the fragment size according to the point size * position
-    int left = clip(int(vertex.position.x - rasterizedPointSize / 2), 0, int(swapBuffer.width) - 1);
-    int right = clip(int(vertex.position.x + rasterizedPointSize / 2), 0, int(swapBuffer.width) - 1);
-    int top = clip(int(vertex.position.y + rasterizedPointSize / 2), 0, int(swapBuffer.height) - 1);
-    int bottom = clip(int(vertex.position.y - rasterizedPointSize / 2), 0, int(swapBuffer.height) - 1);
+    int left = clip(int(vertex.position.x - rasterizedPointSize / 2), 0, int(frameBuffer.width) - 1);
+    int right = clip(int(vertex.position.x + rasterizedPointSize / 2), 0, int(frameBuffer.width) - 1);
+    int top = clip(int(vertex.position.y + rasterizedPointSize / 2), 0, int(frameBuffer.height) - 1);
+    int bottom = clip(int(vertex.position.y - rasterizedPointSize / 2), 0, int(frameBuffer.height) - 1);
     output[index].row = bottom;
     output[index].col = left;
     output[index].width = right - left + 1;
@@ -600,8 +571,8 @@ void LeedsGL::rasteriseTriangle(int index, const Primitive &triangle, std::vecto
 
     // compute a bounding box that starts inverted to frame size
     // clipping will happen in the raster loop proper
-    float minX = swapBuffer.width, maxX = 0.0;
-    float minY = swapBuffer.height, maxY = 0.0;
+    float minX = frameBuffer.width, maxX = 0.0;
+    float minY = frameBuffer.height, maxY = 0.0;
 
     // test against all vertices
     if (vertex0.position.x < minX) minX = vertex0.position.x;
@@ -644,10 +615,10 @@ void LeedsGL::rasteriseTriangle(int index, const Primitive &triangle, std::vecto
     };
     // create a fragment for reuse
     Fragment rasterFragment;
-    int left = clip(int(minX), 0, int(swapBuffer.width) - 1);
-    int right = clip(int(maxX), 0, int(swapBuffer.width) - 1);
-    int top = clip(int(maxY), 0, int(swapBuffer.height) - 1);
-    int bottom = clip(int(minY), 0, int(swapBuffer.height) - 1);
+    int left = clip(int(minX), 0, int(frameBuffer.width) - 1);
+    int right = clip(int(maxX), 0, int(frameBuffer.width) - 1);
+    int top = clip(int(maxY), 0, int(frameBuffer.height) - 1);
+    int bottom = clip(int(minY), 0, int(frameBuffer.height) - 1);
     // update size of fragment
     rasterFragment.row = bottom;
     rasterFragment.col = left;
@@ -720,7 +691,7 @@ void LeedsGL::processFragments(std::vector<Fragment> &fragments) {
                 // if alpha is 0, there should be no color in frag
                 if (frag.colors[y * frag.width + x].alpha > 0) {
                     int px = frag.col + x, py = frag.row + y;
-                    int depth_index = py * int(swapBuffer.width) + px;
+                    int depth_index = py * int(frameBuffer.width) + px;
                     int frag_pixel_index = y * frag.width + x;
                     // depth test
                     if (depthTestEnabled) {
@@ -729,11 +700,11 @@ void LeedsGL::processFragments(std::vector<Fragment> &fragments) {
                             // update depth
                             depthBuffer[depth_index] = frag.depths[frag_pixel_index];
                             // update color
-                            swapBuffer[py][px] = frag.colors[frag_pixel_index];
+                            frameBuffer[py][px] = frag.colors[frag_pixel_index];
                         }
                     } else {
                         // just update color
-                        swapBuffer[py][px] = frag.colors[frag_pixel_index];
+                        frameBuffer[py][px] = frag.colors[frag_pixel_index];
                     }
 
                 } // set pixel color from frag

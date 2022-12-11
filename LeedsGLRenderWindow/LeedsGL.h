@@ -164,7 +164,6 @@ public:
 
     //BUFFERS
     RGBAImage frameBuffer;
-    RGBAImage swapBuffer;
     std::vector<float> depthBuffer;
 
     //Masks
