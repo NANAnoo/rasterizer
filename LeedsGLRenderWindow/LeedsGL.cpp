@@ -404,9 +404,37 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
         std::vector<std::vector<Primitive>> temp_res(primitives.size());
         for (int pri = 0; pri < primitives.size(); pri ++) {
             tasks.emplace_back([pri, &temp_res, intersection_info, cutLine, &primitives, &transform](){
-                // clip a triangle:
-                // get the position info of vertices
+                // first, back cull
                 auto tri = primitives[pri];
+                auto p0 = tri.transformedVertices[0].position.Point();
+                auto p1 = tri.transformedVertices[1].position.Point();
+                auto p2 = tri.transformedVertices[2].position.Point();
+                auto normal = (p1 - p0).cross(p2 - p1);
+                if (normal.z < 0) {
+                    // back cull, drop it
+                    return;
+                }
+                // next, cull the triangle outside visual space
+                auto info_0 = intersection_info(tri.transformedVertices[0].position);
+                auto info_1 = intersection_info(tri.transformedVertices[1].position);
+                auto info_2 = intersection_info(tri.transformedVertices[2].position);
+                if (info_0 == INSIDE && info_1 == INSIDE && info_2 == INSIDE) {
+                    // triangle is in side, no need to clip
+                    // add it to result directly
+                    // transform to DCS
+                    transform(tri.transformedVertices[0].position);
+                    transform(tri.transformedVertices[1].position);
+                    transform(tri.transformedVertices[2].position);
+                    temp_res[pri].push_back(tri);
+                    return; // task return
+                } else if ((info_0 & info_1 & info_2) != INSIDE) {
+                    // all three vertices are outside
+                    // just drop it
+                    return; // task return
+                } // else need clip
+
+                // then, clip the triangle:
+                // get the position info of vertices
                 std::vector<TransformedVertex> clipped_vertices;
                 // current_vertices contains a polygon from previous iteration
                 std::vector<TransformedVertex> current_vertices = tri.transformedVertices;
@@ -462,7 +490,6 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                 // 0, 2, 3
                 // ...
                 // 0, n-1, n
-                // lock result
                 for (int j = 2; j < current_vertices.size(); j ++) {
                     Primitive new_tri;
                     new_tri.transformedVertices = {current_vertices[0],current_vertices[j-1], current_vertices[j]};
