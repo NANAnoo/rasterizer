@@ -291,10 +291,7 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
     // get intersection info with NDCS
     const auto intersection_info = [](Homogeneous4 &p) {
         std::byte res = INSIDE;
-        if (p.w < 0) {
-            return FRONT;
-        }
-        p = p / p.w;
+        p = p / std::abs(p.w);
         if (p.z < 0) res |= FRONT; else if (p.z > 1) res |= BACK;
         if (p.x < -1) res |= LEFT; else if (p.x > 1) res |= RIGHT;
         if (p.y < -1) res |= BOTTOM; else if (p.y > 1) res |= TOP;
@@ -315,7 +312,7 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
     // for example, if want to calculate the intersection between the line and Plane Z = 1
     // alpha = (P_C.z - P1.z) / (P_0.z - P_1.z), where P_C.z == 1
     const auto cutLine =
-            [](const TransformedVertex &v0, const TransformedVertex &v1, byte mode) {
+            [this](const TransformedVertex &v0, const TransformedVertex &v1, byte mode) {
                 float alpha = 0;
                 if (mode == FRONT) {
                     alpha = (0 - v1.position.z) / (v0.position.z - v1.position.z);
@@ -331,14 +328,28 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                     alpha = (1 - v1.position.y) / (v0.position.y - v1.position.y);
                 }
                 float beta = 1 - alpha;
+                
                 // get interpolated vertex
                 TransformedVertex res;
                 res.position = alpha * v0.position + beta * v1.position;
-                res.v_vcs = alpha * v0.v_vcs + beta * v1.v_vcs;
-                res.color = alpha * v0.color + beta * v1.color;
-                res.normal = alpha * v0.normal + beta * v1.normal;
-                res.tex_coord = alpha * v0.tex_coord + beta * v1.tex_coord;
-                res.w = res.position.w;
+                if (this->perspective) {
+                    // use hyperbolic interpolation
+                    float W = alpha / std::abs(v0.w) + beta / std::abs(v1.w);
+                    alpha = alpha / std::abs(v0.w);
+                    beta = beta / std::abs(v1.w);
+                    res.v_vcs = (alpha * v0.v_vcs + beta * v1.v_vcs) / W;
+                    res.color = (1.f / W) * (alpha * v0.color + beta * v1.color);
+                    res.normal = (alpha * v0.normal + beta * v1.normal) / W;
+                    res.tex_coord = (alpha * v0.tex_coord + beta * v1.tex_coord) / W;
+                    res.w = (alpha * v0.w + beta * v1.w) / W;
+                } else {
+                    // interpolate directly
+                    res.v_vcs = alpha * v0.v_vcs + beta * v1.v_vcs;
+                    res.color = alpha * v0.color + beta * v1.color;
+                    res.normal = alpha * v0.normal + beta * v1.normal;
+                    res.tex_coord = alpha * v0.tex_coord + beta * v1.tex_coord;
+                    res.w = alpha * v0.w + beta * v1.w;
+                }
                 return res;
             };
     // clear previous data;
@@ -406,9 +417,15 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
             tasks.emplace_back([pri, &temp_res, intersection_info, cutLine, &primitives, &transform](){
                 // first, back cull
                 auto tri = primitives[pri];
+                // get position after projection
                 auto p0 = tri.transformedVertices[0].position.Point();
                 auto p1 = tri.transformedVertices[1].position.Point();
                 auto p2 = tri.transformedVertices[2].position.Point();
+                // the w which is smaller than 0 will inverse the position 
+                // fix that here
+                if (tri.transformedVertices[0].w < 0) p0 = Cartesian3(0, 0, 0) - p0;
+                if (tri.transformedVertices[1].w < 0) p1 = Cartesian3(0, 0, 0) - p1;
+                if (tri.transformedVertices[2].w < 0) p2 = Cartesian3(0, 0, 0) - p2;
                 auto normal = (p1 - p0).cross(p2 - p1);
                 if (normal.z < 0) {
                     // back cull, drop it
@@ -438,6 +455,7 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                 std::vector<TransformedVertex> clipped_vertices;
                 // current_vertices contains a polygon from previous iteration
                 std::vector<TransformedVertex> current_vertices = tri.transformedVertices;
+                // cut the lines in current_vertices with all six panels
                 for (int i = 0; i < 6; i ++) {
                     std::vector<byte> side_infos(current_vertices.size());
                     // calculate side
@@ -450,14 +468,18 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                     for (int j = 0; j < side_infos.size();j ++) {
                         int begin = j;
                         int end = (j + 1) % side_infos.size();
+                        // line = begin_v -> end_v
                         auto begin_v = current_vertices[begin];
                         auto end_v = current_vertices[end];
+                        // check if the two vertices is in this side or not
                         bool begin_inside = (side_infos[begin] & which_side) == INSIDE;
                         bool end_inside = (side_infos[end] & which_side) == INSIDE;
                         if (begin_inside && end_inside) {
                             // both are inside, add to clipped_vertices
                             clipped_vertices.push_back(begin_v);
-                            // push the first one, the next one will be added in next iteration
+                            // only add the first one, 
+                            // the next one will be added in next iteration 
+                            // ( in next iteration, it will be the begin vertex)
                             // clipped_vertices.push_back(end_v);
                         } else if (!begin_inside && !end_inside) {
                             // both are outside, throw them
@@ -465,13 +487,16 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                         } else {
                             // one inside, one out side
                             auto intersection = cutLine(begin_v, end_v, which_side);
-                            // add points in order
+                            // add points by case
                             if (begin_inside) {
+                                // begin vertex is inside, add begin and intersection
                                 clipped_vertices.push_back(begin_v);
                                 clipped_vertices.push_back(intersection);
                             } else {
+                                // end vertex is inside, add intersection
                                 clipped_vertices.push_back(intersection);
                                 // the next one will be added in next iteration
+                                //  ( in next iteration, it will be the begin vertex)
                                 // clipped_vertices.push_back(end_v);
                             }
                         }
@@ -482,7 +507,7 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
                     clipped_vertices.clear();
                 }
                 for (auto &v : current_vertices) {
-                    // transform position into DCS
+                    // transform all position into DCS
                     transform(v.position);
                 }
                 // generate triangles from current_vertices;
@@ -500,7 +525,7 @@ void LeedsGL::clipAndCull(std::vector<Primitive> &primitives, std::byte mode, st
         if (concurrencyEnable) 
             this->pool->syncGroup(tasks);
         else
-        // set 0 to disable parallel
+            // set 0 to disable parallel
             this->pool->syncGroup(tasks, 0);
         for (auto &res:temp_res) {
             for (auto &tri : res) {
@@ -570,7 +595,9 @@ void LeedsGL::rasteriseLine(int index, const Primitive &line, std::vector<Fragme
     Cartesian3 normal(direction.y, -direction.x, 0);
     // use the padding to get a rect
     Cartesian3 padding = rasterizedLineWidth * normal.unit() / 2;
-    // calculate the four position of the rect
+
+    // calculate the four vertices of the rect
+    // first position, start + pad
     TransformedVertex start_0, start_1, end_0, end_1;
     start_0.position = v0.position + padding;
     start_0.normal = v0.normal;
@@ -579,6 +606,7 @@ void LeedsGL::rasteriseLine(int index, const Primitive &line, std::vector<Fragme
     start_0.v_vcs = v0.v_vcs;
     start_0.tex_coord = v0.tex_coord;
 
+    // second position, start - pad
     start_1.position = v0.position - padding;
     start_1.normal = v0.normal;
     start_1.w = v0.w;
@@ -586,6 +614,7 @@ void LeedsGL::rasteriseLine(int index, const Primitive &line, std::vector<Fragme
     start_1.v_vcs = v0.v_vcs;
     start_1.tex_coord = v0.tex_coord;
 
+    // third position, end + pad
     end_0.position = v1.position + padding;
     end_0.normal = v1.normal;
     end_0.w = v1.w;
@@ -593,6 +622,7 @@ void LeedsGL::rasteriseLine(int index, const Primitive &line, std::vector<Fragme
     end_0.v_vcs = v1.v_vcs;
     end_0.tex_coord = v1.tex_coord;
 
+     // third position, end - pad
     end_1.position = v1.position - padding;
     end_1.normal = v1.normal;
     end_1.w = v1.w;
@@ -695,17 +725,19 @@ void LeedsGL::rasteriseTriangle(int index, const Primitive &triangle, std::vecto
             if ((alpha < 0.0f) || (beta < 0.0f) || (gamma < 0.0f))
                 continue;
 
-            //Be aware of making sure they are perspective correct.
-            // interpolation normal_vcs, v_vcs, tex_coords, depth and color (if there is no texture)
+            // update alpha beta gamma, use Hyperbolic interpolation
             float W = alpha / vertex0.w + beta / vertex1.w + gamma / vertex2.w;
-            float depth = alpha * vertex0.position.z + beta * vertex1.position.z + gamma * vertex2.position.z;
-            // update alpha beta gamma, Hyperbolic interpolation
             alpha = alpha / vertex0.w, beta = beta / vertex1.w, gamma = gamma / vertex2.w;
+
+            // interpolation normal_vcs, v_vcs, tex_coords and color
             Homogeneous4 n_vcs = (vertex0.normal * alpha + vertex1.normal * beta + vertex2.normal * gamma) / W;
             Homogeneous4 v_vcs = (vertex0.v_vcs * alpha + vertex1.v_vcs * beta + vertex2.v_vcs * gamma) / W;
             Cartesian3 tex_coords =
                     (vertex0.tex_coord * alpha + vertex1.tex_coord * beta + vertex2.tex_coord * gamma) / W;
             RGBAValueF color = (1.f / W) * (alpha * vertex0.color + beta * vertex1.color + gamma * vertex2.color);
+
+            // calculate the depth
+            float depth = (projectionMatrix * v_vcs).Point().z;
             // get color at this pixel
             rasterFragment.colors[y * rasterFragment.width + x] = calculateColor(color, tex_coords, n_vcs, v_vcs, W);
             rasterFragment.depths[y * rasterFragment.width + x] = depth;
@@ -724,6 +756,7 @@ RGBAValueF LeedsGL::textureSampler(const Cartesian3 &uv) {
     int x = int(u * float(this->texture->width));
     int y = int(v * float(this->texture->height));
 
+    // get color from texture image
     RGBAValue color = (*this->texture)[y][x];
     return {float(color.red) / 255.f,
             float(color.green) / 255.f,
@@ -824,7 +857,7 @@ RGBAValueF LeedsGL::CalculateLighting(const Homogeneous4 &n_vcs, const Homogeneo
     Cartesian3 bisector = (lightVector + eyeVector).unit();
 
     RGBAValueF emissive = em;
-    RGBAValueF ambient = am.modulate(ambientMaterial);
+    RGBAValueF ambient = am.modulate(lightColour);
 
     float dDot = unitNormal.dot(lightVector);
     dDot = dDot < 0 ? 0 : dDot;
